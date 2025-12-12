@@ -48,8 +48,14 @@ Entry point: `poly-core/src/kit.ts`
 - `createClobClient({ apiCredentials, safeAddress })`
 
 #### Trading Operations (Order Management)
-- `createOrder(clobClient, req)`
-  - When `req.isMarketOrder=true`: Fetches orderbook price via `getPrice` and submits an "aggressive limit order"
+- `createLimitOrder(clobClient, req)`
+  - Supports `GTC` / `GTD`
+  - When `req.isMarketOrder=true`: Fetches orderbook price via `getPrice` and submits an "aggressive limit order" (pseudo market behavior)
+  - `req.mode="auto"` (default): if needed, resolves `tick_size + neg_risk` via a single `getOrderBook(tokenId)` call (cached)
+- `createMarketOrder(clobClient, req)`
+  - Supports `FOK` / `FAK` market-style semantics
+  - BUY uses `amountUsdc`, SELL uses `amountShares`
+  - `req.mode="auto"` (default): if needed, resolves `tick_size + neg_risk` via a single `getOrderBook(tokenId)` call (cached)
 - `cancelOrder(clobClient, orderId)`
 - `getOpenOrders(clobClient)`
 - `getBestBidAsk(clobClient, tokenId)`
@@ -129,12 +135,12 @@ const clobClient = kit.createClobClient({
   safeAddress: session.safeAddress,
 });
 
-const order = await kit.createOrder(clobClient, {
+const order = await kit.createLimitOrder(clobClient, {
   tokenId: "0x...",
   side: "BUY",
   size: 10,
   isMarketOrder: true,
-  negRisk: false,
+  // mode defaults to "auto"
 });
 
 console.log("Order ID:", order.orderId);
@@ -178,12 +184,12 @@ const clobClient = kit.createClobClient({
   safeAddress: session.safeAddress,
 });
 
-await kit.createOrder(clobClient, {
+await kit.createLimitOrder(clobClient, {
   tokenId: "0x...",
   side: "SELL",
   size: 5,
   price: 0.62,
-  negRisk: false,
+  // mode defaults to "auto"
 });
 ```
 
@@ -192,5 +198,5 @@ await kit.createOrder(clobClient, {
 ## Notes
 
 - This package does not perform any session persistence (localStorage/cookie/database). Business logic should handle storing `apiCredentials` and `safeAddress`.
-- `createOrder(..., { isMarketOrder: true })` implementation uses an "aggressive limit order" strategy, not a true on-chain market order.
+- `createLimitOrder(..., { isMarketOrder: true })` implementation uses an "aggressive limit order" strategy, not a true on-chain market order.
 - Currently defaults to Polygon mainnet (chainId=137) as the target chain.

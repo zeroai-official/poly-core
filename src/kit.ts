@@ -18,14 +18,49 @@ import { createRedeemTx } from "./redeem.js";
 
 import type {
   ApiCredentials,
-  CreateOrderRequest,
+  CreateLimitOrderRequest,
+  CreateMarketOrderRequest,
   CreateOrderResult,
   EnsureApprovalsResult,
   HexAddress,
   PolyCoreConfig,
   ProgressEvent,
+  TickSize,
   TradingSession,
 } from "./types.js";
+import { mapClobErrorMsgToCode } from "./clob-errors.js";
+
+type TokenMeta = { tickSize: TickSize; negRisk: boolean; fetchedAtMs: number };
+
+const DEFAULT_META_CACHE_TTL_MS = 60_000;
+
+function getTickDecimals(tick: TickSize): number {
+  const idx = tick.indexOf(".");
+  if (idx < 0) return 0;
+  return tick.length - idx - 1;
+}
+
+function alignPriceToTick(params: {
+  price: number;
+  tick: TickSize;
+  rounding: "nearest" | "down" | "up";
+}): number {
+  const decimals = getTickDecimals(params.tick);
+  const scale = 10 ** decimals;
+
+  const priceInt = Math.round(params.price * scale);
+  const tickInt = Math.round(Number(params.tick) * scale);
+  if (tickInt <= 0) return params.price;
+
+  const ratio = priceInt / tickInt;
+  let steps: number;
+  if (params.rounding === "down") steps = Math.floor(ratio);
+  else if (params.rounding === "up") steps = Math.ceil(ratio);
+  else steps = Math.round(ratio);
+
+  const alignedInt = steps * tickInt;
+  return alignedInt / scale;
+}
 
 export class PolymarketTradingKit {
   private readonly cfg: {
@@ -39,6 +74,7 @@ export class PolymarketTradingKit {
 
   private readonly eoaAddress: HexAddress;
   private readonly signer: Signer;
+  private readonly tokenMetaCache = new Map<string, TokenMeta>();
 
   constructor(params: {
     config: PolyCoreConfig;
@@ -225,9 +261,154 @@ export class PolymarketTradingKit {
     };
   }
 
-  async createOrder(clobClient: ClobClient, req: CreateOrderRequest): Promise<CreateOrderResult> {
+  private normalizeOrderResponse(res: any): CreateOrderResult {
+    const rawSuccess = Boolean(res?.success ?? (res?.orderID || res?.orderId));
+    const errorMsg =
+      (res?.errorMsg as string | undefined) ?? (res?.error as string | undefined);
+    const status = res?.status as string | undefined;
+    const orderId =
+      (res?.orderID as string | undefined) ??
+      (res?.orderId as string | undefined) ??
+      undefined;
+    const txHashes =
+      (res?.transactionsHashes as string[] | undefined) ??
+      (res?.transactionHashes as string[] | undefined) ??
+      (res?.orderHashes as string[] | undefined);
+
+    const out: CreateOrderResult = {
+      success: rawSuccess && (!errorMsg || errorMsg.length === 0),
+    };
+
+    if (orderId) out.orderId = orderId;
+    if (status) out.status = status;
+    if (errorMsg) {
+      out.errorMsg = errorMsg;
+      const code = mapClobErrorMsgToCode(errorMsg);
+      if (code) out.errorCode = code;
+    }
+    if (txHashes && Array.isArray(txHashes)) out.transactionHashes = txHashes;
+    out.raw = res;
+
+    return out;
+  }
+
+  private async resolveTokenMeta(params: {
+    clobClient: ClobClient;
+    tokenId: string;
+    mode: "auto" | "manual";
+    tickSizeOverride?: TickSize;
+    negRiskOverride?: boolean;
+    needTickSize: boolean;
+    needNegRisk: boolean;
+  }): Promise<{ tickSize?: TickSize; negRisk?: boolean }> {
+    if (params.mode === "manual") {
+      const out: { tickSize?: TickSize; negRisk?: boolean } = {};
+      if (params.tickSizeOverride) out.tickSize = params.tickSizeOverride;
+      if (params.negRiskOverride !== undefined) out.negRisk = params.negRiskOverride;
+      return out;
+    }
+
+    // If caller already provided everything needed, do not query.
+    const hasTick = !params.needTickSize || !!params.tickSizeOverride;
+    const hasNeg = !params.needNegRisk || params.negRiskOverride !== undefined;
+    if (hasTick && hasNeg) {
+      const out: { tickSize?: TickSize; negRisk?: boolean } = {};
+      if (params.tickSizeOverride) out.tickSize = params.tickSizeOverride;
+      if (params.negRiskOverride !== undefined) out.negRisk = params.negRiskOverride;
+      return out;
+    }
+
+    const cached = this.tokenMetaCache.get(params.tokenId);
+    const now = Date.now();
+    if (cached && now - cached.fetchedAtMs <= DEFAULT_META_CACHE_TTL_MS) {
+      const out: { tickSize?: TickSize; negRisk?: boolean } = {};
+      out.tickSize = params.tickSizeOverride ?? cached.tickSize;
+      out.negRisk = params.negRiskOverride ?? cached.negRisk;
+      return out;
+    }
+
+    // Single call to get both tick size and neg risk.
+    const ob = await (params.clobClient as any).getOrderBook(params.tokenId);
+    const tickSize =
+      (ob?.tick_size as TickSize | undefined) ?? params.tickSizeOverride;
+    const negRisk =
+      (ob?.neg_risk as boolean | undefined) ?? params.negRiskOverride;
+
+    if (tickSize && typeof negRisk === "boolean") {
+      this.tokenMetaCache.set(params.tokenId, { tickSize, negRisk, fetchedAtMs: now });
+    }
+
+    const out: { tickSize?: TickSize; negRisk?: boolean } = {};
+    if (tickSize) out.tickSize = tickSize;
+    if (negRisk !== undefined) out.negRisk = negRisk;
+    return out;
+  }
+
+  /**
+   * Limit orders (GTC/GTD). Also supports an aggressive orderbook mode via req.isMarketOrder=true.
+   */
+  async createLimitOrder(
+    clobClient: ClobClient,
+    req: CreateLimitOrderRequest
+  ): Promise<CreateOrderResult> {
     const side = req.side === "BUY" ? Side.BUY : Side.SELL;
 
+    const timeInForce = req.timeInForce ?? "GTC";
+    const orderType = timeInForce === "GTD" ? OrderType.GTD : OrderType.GTC;
+    const deferExec = req.deferExec ?? false;
+
+    const tickSizeMode = req.tickSizeMode ?? "none";
+    const tickRounding = req.tickRounding ?? "nearest";
+    const mode = req.mode ?? "auto";
+
+    const metaArgs: any = {
+      clobClient,
+      tokenId: req.tokenId,
+      mode,
+      needTickSize: tickSizeMode !== "none",
+      needNegRisk: req.negRisk === undefined,
+    };
+    if (req.tickSize) metaArgs.tickSizeOverride = req.tickSize;
+    if (req.negRisk !== undefined) metaArgs.negRiskOverride = req.negRisk;
+    const meta = await this.resolveTokenMeta(metaArgs);
+
+    const options: any = {};
+    const negRiskResolved =
+      req.negRisk !== undefined ? req.negRisk : meta.negRisk;
+    if (negRiskResolved !== undefined) {
+      options.negRisk = negRiskResolved;
+    }
+
+    const applyTick = async (price: number): Promise<number | CreateOrderResult> => {
+      if (tickSizeMode === "none") return price;
+      const tick = meta.tickSize ?? req.tickSize;
+      if (!tick) {
+        return {
+          success: false,
+          errorCode: "INVALID_ORDER_MIN_TICK_SIZE",
+          errorMsg: "Missing tick size for token",
+        };
+      }
+      const aligned = alignPriceToTick({ price, tick, rounding: tickRounding });
+      if (tickSizeMode === "validate" && Math.abs(aligned - price) > 1e-12) {
+        return {
+          success: false,
+          errorCode: "INVALID_ORDER_MIN_TICK_SIZE",
+          errorMsg: "Price breaks minimum tick size rules",
+        };
+      }
+      return aligned;
+    };
+
+    if (orderType === OrderType.GTD && !req.expirationUnixSeconds) {
+      return {
+        success: false,
+        errorCode: "INVALID_ORDER_EXPIRATION",
+        errorMsg: "invalid expiration",
+      };
+    }
+
+    // "Aggressive limit" mode (pseudo market behavior).
     if (req.isMarketOrder) {
       let aggressivePrice: number;
       try {
@@ -246,63 +427,230 @@ export class PolymarketTradingKit {
         aggressivePrice = req.side === "BUY" ? 0.99 : 0.01;
       }
 
+      const maybeAligned = await applyTick(aggressivePrice);
+      if (typeof maybeAligned !== "number") return maybeAligned;
+
       const order: any = {
         tokenID: req.tokenId,
-        price: aggressivePrice,
+        price: maybeAligned,
         size: req.size,
         side,
         feeRateBps: 0,
-        expiration: 0,
+        expiration: orderType === OrderType.GTD ? req.expirationUnixSeconds : 0,
         taker: "0x0000000000000000000000000000000000000000",
       };
 
-      const options: any = {};
-      if (req.negRisk !== undefined) {
-        options.negRisk = req.negRisk;
+      try {
+        const res = await (clobClient as any).createAndPostOrder(
+          order,
+          options,
+          orderType,
+          deferExec
+        );
+        const normalized = this.normalizeOrderResponse(res);
+        if (!normalized.success) return normalized;
+        if (!normalized.orderId) {
+          return {
+            success: false,
+            errorCode: "UNKNOWN",
+            errorMsg: "Order submission failed",
+            raw: normalized.raw,
+          };
+        }
+        return normalized;
+      } catch (err: any) {
+        const httpStatus = err?.response?.status as number | undefined;
+        const data = err?.response?.data as any;
+        const errorMsg: string =
+          (data?.errorMsg as string | undefined) ??
+          (data?.error as string | undefined) ??
+          (err?.message as string | undefined) ??
+          "Request failed";
+        return {
+          success: false,
+          errorCode: httpStatus ? "HTTP_ERROR" : "UNKNOWN",
+          errorMsg,
+          raw: { httpStatus, data },
+        };
       }
-
-      const res = await clobClient.createAndPostOrder(
-        order,
-        options,
-        OrderType.GTC
-      );
-
-      if (!res.orderID) {
-        throw new Error("Order submission failed");
-      }
-      return { orderId: res.orderID };
     }
 
     if (req.price === undefined) {
-      throw new Error("price is required for limit orders");
+      return {
+        success: false,
+        errorCode: "INVALID_ORDER_ERROR",
+        errorMsg: "price is required for limit orders",
+      };
     }
+
+    const maybeAligned = await applyTick(req.price);
+    if (typeof maybeAligned !== "number") return maybeAligned;
 
     const order: any = {
       tokenID: req.tokenId,
-      price: req.price,
+      price: maybeAligned,
       size: req.size,
       side,
       feeRateBps: 0,
-      expiration: 0,
+      expiration: orderType === OrderType.GTD ? req.expirationUnixSeconds : 0,
       taker: "0x0000000000000000000000000000000000000000",
     };
 
+    try {
+      const res = await (clobClient as any).createAndPostOrder(
+        order,
+        options,
+        orderType,
+        deferExec
+      );
+      const normalized = this.normalizeOrderResponse(res);
+      if (!normalized.success) return normalized;
+      if (!normalized.orderId) {
+        return {
+          success: false,
+          errorCode: "UNKNOWN",
+          errorMsg: "Order submission failed",
+          raw: normalized.raw,
+        };
+      }
+      return normalized;
+    } catch (err: any) {
+      const httpStatus = err?.response?.status as number | undefined;
+      const data = err?.response?.data as any;
+      const errorMsg: string =
+        (data?.errorMsg as string | undefined) ??
+        (data?.error as string | undefined) ??
+        (err?.message as string | undefined) ??
+        "Request failed";
+      return {
+        success: false,
+        errorCode: httpStatus ? "HTTP_ERROR" : "UNKNOWN",
+        errorMsg,
+        raw: { httpStatus, data },
+      };
+    }
+  }
+
+  /**
+   * Market-style orders (FOK/FAK).
+   * - BUY: amountUsdc is required
+   * - SELL: amountShares is required
+   */
+  async createMarketOrder(
+    clobClient: ClobClient,
+    req: CreateMarketOrderRequest
+  ): Promise<CreateOrderResult> {
+    const side = req.side === "BUY" ? Side.BUY : Side.SELL;
+    const deferExec = req.deferExec ?? false;
+    const orderType = req.orderType ?? "FOK";
+    const tickSizeMode = req.tickSizeMode ?? "none";
+    const tickRounding = req.tickRounding ?? "nearest";
+    const mode = req.mode ?? "auto";
+
+    const metaArgs: any = {
+      clobClient,
+      tokenId: req.tokenId,
+      mode,
+      needTickSize: tickSizeMode !== "none" && req.price !== undefined,
+      needNegRisk: req.negRisk === undefined,
+    };
+    if (req.tickSize) metaArgs.tickSizeOverride = req.tickSize;
+    if (req.negRisk !== undefined) metaArgs.negRiskOverride = req.negRisk;
+    const meta = await this.resolveTokenMeta(metaArgs);
+
     const options: any = {};
-    if (req.negRisk !== undefined) {
-      options.negRisk = req.negRisk;
+    const negRiskResolved =
+      req.negRisk !== undefined ? req.negRisk : meta.negRisk;
+    if (negRiskResolved !== undefined) {
+      options.negRisk = negRiskResolved;
     }
 
-    const res = await clobClient.createAndPostOrder(
-      order,
-      options,
-      OrderType.GTC
-    );
-
-    if (!res.orderID) {
-      throw new Error("Order submission failed");
+    let price = req.price;
+    if (price !== undefined && tickSizeMode !== "none") {
+      const tick = meta.tickSize ?? req.tickSize;
+      if (!tick) {
+        return {
+          success: false,
+          errorCode: "INVALID_ORDER_MIN_TICK_SIZE",
+          errorMsg: "Missing tick size for token",
+        };
+      }
+      const aligned = alignPriceToTick({ price, tick, rounding: tickRounding });
+      if (tickSizeMode === "validate" && Math.abs(aligned - price) > 1e-12) {
+        return {
+          success: false,
+          errorCode: "INVALID_ORDER_MIN_TICK_SIZE",
+          errorMsg: "Price breaks minimum tick size rules",
+        };
+      }
+      price = aligned;
     }
 
-    return { orderId: res.orderID };
+    const amount =
+      req.side === "BUY" ? req.amountUsdc : req.amountShares;
+    if (amount === undefined || amount <= 0) {
+      return {
+        success: false,
+        errorCode: "INVALID_ORDER_ERROR",
+        errorMsg:
+          req.side === "BUY"
+            ? "amountUsdc is required for BUY market orders"
+            : "amountShares is required for SELL market orders",
+      };
+    }
+
+    const userMarketOrder: any = {
+      tokenID: req.tokenId,
+      amount,
+      side,
+    };
+    if (price !== undefined) {
+      userMarketOrder.price = price;
+    }
+
+    try {
+      const res = await (clobClient as any).createAndPostMarketOrder(
+        userMarketOrder,
+        options,
+        orderType,
+        deferExec
+      );
+      const normalized = this.normalizeOrderResponse(res);
+      if (!normalized.success) return normalized;
+      if (!normalized.orderId) {
+        return {
+          success: false,
+          errorCode: "UNKNOWN",
+          errorMsg: "Order submission failed",
+          raw: normalized.raw,
+        };
+      }
+      return normalized;
+    } catch (err: any) {
+      const httpStatus = err?.response?.status as number | undefined;
+      const data = err?.response?.data as any;
+      const errorMsg: string =
+        (data?.errorMsg as string | undefined) ??
+        (data?.error as string | undefined) ??
+        (err?.message as string | undefined) ??
+        "Request failed";
+      return {
+        success: false,
+        errorCode: httpStatus ? "HTTP_ERROR" : "UNKNOWN",
+        errorMsg,
+        raw: { httpStatus, data },
+      };
+    }
+  }
+
+  /**
+   * @deprecated Use createLimitOrder instead.
+   */
+  async createOrder(
+    clobClient: ClobClient,
+    req: any
+  ): Promise<CreateOrderResult> {
+    return await this.createLimitOrder(clobClient, req as CreateLimitOrderRequest);
   }
 
   async cancelOrder(clobClient: ClobClient, orderId: string): Promise<void> {

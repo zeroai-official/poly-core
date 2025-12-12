@@ -6,3 +6,4 @@ export * from "./approvals.js";
 export * from "./redeem.js";
 export * from "./data.js";
 export * from "./kit.js";
+export * from "./clob-errors.js";
