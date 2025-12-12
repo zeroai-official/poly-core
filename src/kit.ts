@@ -1,7 +1,7 @@
 import { BuilderConfig } from "@polymarket/builder-signing-sdk";
 import { RelayClient } from "@polymarket/builder-relayer-client";
-import { deriveSafe } from "@polymarket/builder-relayer-client/dist/builder/derive";
-import { getContractConfig } from "@polymarket/builder-relayer-client/dist/config";
+import { deriveSafe } from "@polymarket/builder-relayer-client/dist/builder/derive.js";
+import { getContractConfig } from "@polymarket/builder-relayer-client/dist/config/index.js";
 import { ClobClient, OrderType, Side } from "@polymarket/clob-client";
 import { createPublicClient, http } from "viem";
 import { polygon } from "viem/chains";
