@@ -1,5 +1,5 @@
 {
-  "name": "poly-core",
+  "name": "@yafet699/poly-core",
   "version": "1.0.0",
   "description": "A pure TypeScript backend interface for Polymarket Builder + Safe workflows",
   "keywords": [
@@ -14,6 +14,14 @@
   ],
   "author": "0ai.ai",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zeroai-official/poly-core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zeroai-official/poly-core/issues"
+  },
+  "homepage": "https://github.com/zeroai-official/poly-core#readme",
   "private": false,
   "type": "module",
   "main": "./dist/index.js",
