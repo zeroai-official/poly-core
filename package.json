@@ -1,0 +1,46 @@
+{
+  "name": "poly-core",
+  "version": "1.0.0",
+  "description": "A pure TypeScript backend interface for Polymarket Builder + Safe workflows",
+  "keywords": [
+    "polymarket",
+    "safe",
+    "gnosis-safe",
+    "trading",
+    "ethereum",
+    "polygon",
+    "defi",
+    "typescript"
+  ],
+  "author": "0ai.ai",
+  "license": "MIT",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "node -e \"try{require('fs').rmSync('dist',{recursive:true,force:true})}catch(e){}\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "dependencies": {
+    "@polymarket/builder-relayer-client": "^0.0.6",
+    "@polymarket/builder-signing-sdk": "^0.0.8",
+    "@polymarket/clob-client": "^4.22.8",
+    "ethers": "^5.8.0",
+    "viem": "^2.39.2"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}
