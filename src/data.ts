@@ -1,6 +1,6 @@
-import { GAMMA_API_URL, DATA_API_URL } from "./constants";
-import { MissingDependencyError } from "./errors";
-import type { PolyCoreConfig } from "./types";
+import { GAMMA_API_URL, DATA_API_URL } from "./constants.js";
+import { MissingDependencyError } from "./errors.js";
+import type { PolyCoreConfig } from "./types.js";
 
 export type PolymarketMarket = {
   id: string;

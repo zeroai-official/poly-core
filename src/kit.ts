@@ -11,10 +11,10 @@ import {
   DEFAULT_CHAIN_ID,
   DEFAULT_CLOB_API_URL,
   DEFAULT_RELAYER_URL,
-} from "./constants";
-import { InvalidConfigError } from "./errors";
-import { checkAllApprovals, createAllApprovalTxs } from "./approvals";
-import { createRedeemTx } from "./redeem";
+} from "./constants.js";
+import { InvalidConfigError } from "./errors.js";
+import { checkAllApprovals, createAllApprovalTxs } from "./approvals.js";
+import { createRedeemTx } from "./redeem.js";
 
 import type {
   ApiCredentials,
@@ -25,7 +25,7 @@ import type {
   PolyCoreConfig,
   ProgressEvent,
   TradingSession,
-} from "./types";
+} from "./types.js";
 
 export class PolymarketTradingKit {
   private readonly cfg: {

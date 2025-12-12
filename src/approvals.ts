@@ -11,13 +11,13 @@ import {
   NEG_RISK_ADAPTER_ADDRESS,
   NEG_RISK_CTF_EXCHANGE_ADDRESS,
   USDC_E_CONTRACT_ADDRESS,
-} from "./tokens";
-import { DEFAULT_USDC_APPROVAL_THRESHOLD, MAX_UINT256 } from "./constants";
+} from "./tokens.js";
+import { DEFAULT_USDC_APPROVAL_THRESHOLD, MAX_UINT256 } from "./constants.js";
 import type {
   ApprovalStatus,
   CreateApprovalTxsResult,
   HexAddress,
-} from "./types";
+} from "./types.js";
 
 const erc1155Abi = [
   {

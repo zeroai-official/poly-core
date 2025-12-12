@@ -3,8 +3,8 @@ import {
   OperationType,
   type SafeTransaction,
 } from "@polymarket/builder-relayer-client";
-import { CTF_CONTRACT_ADDRESS, USDC_E_CONTRACT_ADDRESS } from "./tokens";
-import type { RedeemParams } from "./types";
+import { CTF_CONTRACT_ADDRESS, USDC_E_CONTRACT_ADDRESS } from "./tokens.js";
+import type { RedeemParams } from "./types.js";
 
 const ctfAbi = [
   {
