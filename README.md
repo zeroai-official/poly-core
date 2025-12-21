@@ -62,6 +62,11 @@ Entry point: `poly-core/src/kit.ts`
 
 #### Redemption (CTF redeem)
 - `redeemPosition(relayClient, { conditionId, outcomeIndex })`
+- `mergePositions(relayClient, { conditionId, partition, amount, parentCollectionId?, collateralToken?, ctfAddress? })`
+- `transferUsdc(relayClient, { to, amount, tokenAddress? })`
+- `approveUsdc(relayClient, { spender, amount?, tokenAddress? })`
+- `approveAndTransferUsdc(relayClient, { spender, approveAmount?, to, transferAmount, tokenAddress? })`
+- `splitPositions(relayClient, { conditionId, partition, amount, parentCollectionId?, collateralToken?, ctfAddress? })`
 
 ---
 
@@ -70,7 +75,10 @@ Entry point: `poly-core/src/data.ts`
 
 - `listHighVolumeMarkets(limit)`: Fetches via `gamma-api.polymarket.com`
 - `getMarketByTokenId(tokenId)`: Fetches via `gamma-api.polymarket.com`
+- `getMarketBySlug(slug, { includeTag? })`: Fetches via `gamma-api.polymarket.com` (Gamma: market by slug)
+- `getEventBySlug(slug, { includeChat?, includeTemplate? })`: Fetches via `gamma-api.polymarket.com` (Gamma: event by slug)
 - `getPositions(user)`: Fetches via `data-api.polymarket.com`
+- `getOrderBookSummaries(tokenIds)`: Fetches via `clob.polymarket.com` (CLOB: POST /books)
 
 ---
 
@@ -86,6 +94,27 @@ Entry point: `poly-core/src/approvals.ts`
 Entry point: `poly-core/src/redeem.ts`
 
 - `createRedeemTx({ conditionId, outcomeIndex })`
+
+### 5) Merge Transaction Builder
+Entry point: `poly-core/src/merge.ts`
+
+- `createMergePositionsTx({ conditionId, partition, amount, parentCollectionId?, collateralToken?, ctfAddress? })`
+
+### 6) Transfer Transaction Builder
+Entry point: `poly-core/src/transfer.ts`
+
+- `createUsdcTransferTx({ to, amount, tokenAddress? })`
+
+### 7) Split Transaction Builder
+Entry point: `poly-core/src/split.ts`
+
+- `createSplitPositionTx({ conditionId, partition, amount, parentCollectionId?, collateralToken?, ctfAddress? })`
+
+### 8) USDC Transaction Builder
+Entry point: `poly-core/src/usdc.ts`
+
+- `createUsdcApproveTx({ spender, amount?, tokenAddress? })`
+- `createApproveAndTransferUsdcTxs({ spender, approveAmount?, to, transferAmount, tokenAddress? })`
 
 ---
 

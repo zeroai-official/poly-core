@@ -15,18 +15,27 @@ import {
 import { InvalidConfigError } from "./errors.js";
 import { checkAllApprovals, createAllApprovalTxs } from "./approvals.js";
 import { createRedeemTx } from "./redeem.js";
+import { createMergePositionsTx } from "./merge.js";
+import { createUsdcTransferTx } from "./transfer.js";
+import { createSplitPositionTx } from "./split.js";
+import { createApproveAndTransferUsdcTxs, createUsdcApproveTx } from "./usdc.js";
 
 import type {
+  ApproveAndTransferUsdcParams,
   ApiCredentials,
   CreateLimitOrderRequest,
   CreateMarketOrderRequest,
   CreateOrderResult,
   EnsureApprovalsResult,
   HexAddress,
+  MergePositionsParams,
   PolyCoreConfig,
   ProgressEvent,
   TickSize,
   TradingSession,
+  UsdcTransferParams,
+  SplitPositionParams,
+  UsdcApproveParams,
 } from "./types.js";
 import { mapClobErrorMsgToCode } from "./clob-errors.js";
 
@@ -700,6 +709,45 @@ export class PolymarketTradingKit {
       [tx],
       `Redeem position for condition ${params.conditionId}`
     );
+    await response.wait();
+  }
+
+  async mergePositions(relayClient: RelayClient, params: MergePositionsParams): Promise<void> {
+    const tx = createMergePositionsTx(params);
+    const response = await relayClient.execute(
+      [tx],
+      `Merge positions for condition ${params.conditionId}`
+    );
+    await response.wait();
+  }
+
+  async transferUsdc(relayClient: RelayClient, params: UsdcTransferParams): Promise<void> {
+    const tx = createUsdcTransferTx(params);
+    const response = await relayClient.execute([tx], "Transfer USDCe");
+    await response.wait();
+  }
+
+  async splitPositions(relayClient: RelayClient, params: SplitPositionParams): Promise<void> {
+    const tx = createSplitPositionTx(params);
+    const response = await relayClient.execute(
+      [tx],
+      `Split positions for condition ${params.conditionId}`
+    );
+    await response.wait();
+  }
+
+  async approveUsdc(relayClient: RelayClient, params: UsdcApproveParams): Promise<void> {
+    const tx = createUsdcApproveTx(params);
+    const response = await relayClient.execute([tx], "Approve USDCe");
+    await response.wait();
+  }
+
+  async approveAndTransferUsdc(
+    relayClient: RelayClient,
+    params: ApproveAndTransferUsdcParams
+  ): Promise<void> {
+    const txs = createApproveAndTransferUsdcTxs(params);
+    const response = await relayClient.execute(txs, "Approve and transfer");
     await response.wait();
   }
 }

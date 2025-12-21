@@ -213,6 +213,93 @@ export type RedeemParams = {
   outcomeIndex: number;
 };
 
+export type MergePositionsParams = {
+  /**
+   * bytes32 hex string (0x...).
+   */
+  conditionId: string;
+  /**
+   * uint256[] partition (index sets).
+   */
+  partition: bigint[];
+  /**
+   * uint256 amount (usually collateral amount in base units).
+   */
+  amount: bigint;
+  /**
+   * Optional overrides.
+   */
+  collateralToken?: HexAddress;
+  parentCollectionId?: `0x${string}`;
+  ctfAddress?: HexAddress;
+};
+
+export type UsdcTransferParams = {
+  to: HexAddress;
+  /**
+   * Raw uint256 amount in token base units.
+   * Example: parseUnits("100", 6) for 100 USDC.e.
+   */
+  amount: bigint;
+  /**
+   * Optional override for token address (defaults to USDC.e).
+   */
+  tokenAddress?: HexAddress;
+};
+
+export type SplitPositionParams = {
+  /**
+   * bytes32 hex string (0x...).
+   */
+  conditionId: string;
+  /**
+   * uint256[] partition (index sets).
+   */
+  partition: bigint[];
+  /**
+   * uint256 amount (usually collateral amount in base units).
+   */
+  amount: bigint;
+  /**
+   * Optional overrides.
+   */
+  collateralToken?: HexAddress;
+  parentCollectionId?: `0x${string}`;
+  ctfAddress?: HexAddress;
+};
+
+export type UsdcApproveParams = {
+  spender: HexAddress;
+  /**
+   * Raw uint256 amount in token base units.
+   * Default: max uint256.
+   */
+  amount?: bigint;
+  /**
+   * Optional override for token address (defaults to USDC.e).
+   */
+  tokenAddress?: HexAddress;
+};
+
+export type ApproveAndTransferUsdcParams = {
+  spender: HexAddress;
+  to: HexAddress;
+  /**
+   * Raw uint256 approve amount in token base units.
+   * Default: max uint256.
+   */
+  approveAmount?: bigint;
+  /**
+   * Raw uint256 transfer amount in token base units.
+   * Example: parseUnits("50", 6) for 50 USDC.e.
+   */
+  transferAmount: bigint;
+  /**
+   * Optional override for token address (defaults to USDC.e).
+   */
+  tokenAddress?: HexAddress;
+};
+
 export type CreateApprovalTxsResult = {
   txs: SafeTransaction[];
 };
