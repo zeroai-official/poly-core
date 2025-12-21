@@ -61,6 +61,66 @@ export type PolymarketPosition = {
   [key: string]: any;
 };
 
+export type PositionsSortBy =
+  | "CURRENT"
+  | "INITIAL"
+  | "TOKENS"
+  | "CASHPNL"
+  | "PERCENTPNL"
+  | "TITLE"
+  | "RESOLVING"
+  | "PRICE"
+  | "AVGPRICE";
+
+export type PositionsSortDirection = "ASC" | "DESC";
+
+export type GetPositionsParams = {
+  /**
+   * User Profile Address (0x-prefixed, 40 hex chars)
+   */
+  user: string;
+  /**
+   * Comma-separated list of condition IDs. Mutually exclusive with eventId.
+   */
+  market?: string[];
+  /**
+   * Comma-separated list of event IDs. Mutually exclusive with market.
+   */
+  eventId?: number[];
+  /**
+   * Default: 1
+   */
+  sizeThreshold?: number;
+  /**
+   * Default: false
+   */
+  redeemable?: boolean;
+  /**
+   * Default: false
+   */
+  mergeable?: boolean;
+  /**
+   * Default: 100. Range: 0..500
+   */
+  limit?: number;
+  /**
+   * Default: 0. Range: 0..10000
+   */
+  offset?: number;
+  /**
+   * Default: TOKENS
+   */
+  sortBy?: PositionsSortBy;
+  /**
+   * Default: DESC
+   */
+  sortDirection?: PositionsSortDirection;
+  /**
+   * Max length: 100
+   */
+  title?: string;
+};
+
 export type PolymarketEvent = {
   id: string;
   ticker?: string | null;
@@ -275,14 +335,119 @@ export class PolymarketDataClient {
     return json as PolymarketMarketDetails;
   }
 
-  async getPositions(user: string): Promise<PolymarketPosition[]> {
-    const params = new URLSearchParams({
-      user,
-      sizeThreshold: "0.01",
-      limit: "500",
-    });
+  async getPositions(user: string): Promise<PolymarketPosition[]>;
+  async getPositions(params: GetPositionsParams): Promise<PolymarketPosition[]>;
+  async getPositions(arg: string | GetPositionsParams): Promise<PolymarketPosition[]> {
+    const p: GetPositionsParams =
+      typeof arg === "string"
+        ? {
+            // Backward-compatible defaults (do not change existing behavior).
+            user: arg,
+            sizeThreshold: 0.01,
+            limit: 500,
+          }
+        : arg;
 
-    const res = await this.fetchFn(`${DATA_API_URL}/positions?${params}`, {
+    const user = String(p.user).trim();
+    if (!user) {
+      throw new Error("user is required");
+    }
+
+    if (p.market?.length && p.eventId?.length) {
+      throw new Error("market and eventId are mutually exclusive");
+    }
+
+    const qp = new URLSearchParams();
+    qp.set("user", user);
+
+    if (p.market?.length) {
+      qp.set("market", p.market.map((x) => String(x).trim()).filter(Boolean).join(","));
+    }
+    if (p.eventId?.length) {
+      qp.set(
+        "eventId",
+        p.eventId.map((x) => String(Math.floor(x))).filter(Boolean).join(",")
+      );
+    }
+
+    // Doc defaults (only applied for object-style usage).
+    const applyDocDefaults = typeof arg !== "string";
+
+    const sizeThreshold =
+      p.sizeThreshold !== undefined
+        ? p.sizeThreshold
+        : applyDocDefaults
+          ? 1
+          : undefined;
+    if (sizeThreshold !== undefined) {
+      qp.set("sizeThreshold", String(sizeThreshold));
+    }
+
+    const redeemable =
+      p.redeemable !== undefined
+        ? p.redeemable
+        : applyDocDefaults
+          ? false
+          : undefined;
+    if (redeemable !== undefined) {
+      qp.set("redeemable", String(redeemable));
+    }
+
+    const mergeable =
+      p.mergeable !== undefined
+        ? p.mergeable
+        : applyDocDefaults
+          ? false
+          : undefined;
+    if (mergeable !== undefined) {
+      qp.set("mergeable", String(mergeable));
+    }
+
+    const limit =
+      p.limit !== undefined
+        ? p.limit
+        : applyDocDefaults
+          ? 100
+          : undefined;
+    if (limit !== undefined) {
+      qp.set("limit", String(limit));
+    }
+
+    const offset =
+      p.offset !== undefined
+        ? p.offset
+        : applyDocDefaults
+          ? 0
+          : undefined;
+    if (offset !== undefined) {
+      qp.set("offset", String(offset));
+    }
+
+    const sortBy =
+      p.sortBy !== undefined
+        ? p.sortBy
+        : applyDocDefaults
+          ? "TOKENS"
+          : undefined;
+    if (sortBy !== undefined) {
+      qp.set("sortBy", sortBy);
+    }
+
+    const sortDirection =
+      p.sortDirection !== undefined
+        ? p.sortDirection
+        : applyDocDefaults
+          ? "DESC"
+          : undefined;
+    if (sortDirection !== undefined) {
+      qp.set("sortDirection", sortDirection);
+    }
+
+    if (p.title !== undefined) {
+      qp.set("title", String(p.title));
+    }
+
+    const res = await this.fetchFn(`${DATA_API_URL}/positions?${qp}`, {
       headers: { "Content-Type": "application/json" },
     });
 
