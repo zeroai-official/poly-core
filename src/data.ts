@@ -370,77 +370,28 @@ export class PolymarketDataClient {
       );
     }
 
-    // Doc defaults (only applied for object-style usage).
-    const applyDocDefaults = typeof arg !== "string";
-
-    const sizeThreshold =
-      p.sizeThreshold !== undefined
-        ? p.sizeThreshold
-        : applyDocDefaults
-          ? 1
-          : undefined;
-    if (sizeThreshold !== undefined) {
-      qp.set("sizeThreshold", String(sizeThreshold));
+    // Important: Data-API treats several query params (e.g. mergeable/redeemable) as filters.
+    // Therefore, we ONLY include query params when the caller explicitly provides them.
+    if (p.sizeThreshold !== undefined) {
+      qp.set("sizeThreshold", String(p.sizeThreshold));
     }
-
-    const redeemable =
-      p.redeemable !== undefined
-        ? p.redeemable
-        : applyDocDefaults
-          ? false
-          : undefined;
-    if (redeemable !== undefined) {
-      qp.set("redeemable", String(redeemable));
+    if (p.redeemable !== undefined) {
+      qp.set("redeemable", String(p.redeemable));
     }
-
-    const mergeable =
-      p.mergeable !== undefined
-        ? p.mergeable
-        : applyDocDefaults
-          ? false
-          : undefined;
-    if (mergeable !== undefined) {
-      qp.set("mergeable", String(mergeable));
+    if (p.mergeable !== undefined) {
+      qp.set("mergeable", String(p.mergeable));
     }
-
-    const limit =
-      p.limit !== undefined
-        ? p.limit
-        : applyDocDefaults
-          ? 100
-          : undefined;
-    if (limit !== undefined) {
-      qp.set("limit", String(limit));
+    if (p.limit !== undefined) {
+      qp.set("limit", String(p.limit));
     }
-
-    const offset =
-      p.offset !== undefined
-        ? p.offset
-        : applyDocDefaults
-          ? 0
-          : undefined;
-    if (offset !== undefined) {
-      qp.set("offset", String(offset));
+    if (p.offset !== undefined) {
+      qp.set("offset", String(p.offset));
     }
-
-    const sortBy =
-      p.sortBy !== undefined
-        ? p.sortBy
-        : applyDocDefaults
-          ? "TOKENS"
-          : undefined;
-    if (sortBy !== undefined) {
-      qp.set("sortBy", sortBy);
+    if (p.sortBy !== undefined) {
+      qp.set("sortBy", p.sortBy);
     }
-
-    const sortDirection =
-      p.sortDirection !== undefined
-        ? p.sortDirection
-        : applyDocDefaults
-          ? "DESC"
-          : undefined;
-    if (sortDirection !== undefined) {
-      qp.set("sortDirection", sortDirection);
+    if (p.sortDirection !== undefined) {
+      qp.set("sortDirection", p.sortDirection);
     }
 
     if (p.title !== undefined) {
